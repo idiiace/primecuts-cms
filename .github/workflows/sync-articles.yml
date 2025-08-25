@@ -1,4 +1,4 @@
-# .github/workflows/sync-articles.yml (FINAL PRODUCTION VERSION v2)
+# .github/workflows/sync-articles.yml (MORE ROBUST VERSION)
 name: Sync Articles to GitHub Pages CDN
 
 on:
@@ -22,31 +22,25 @@ jobs:
           python-version: '3.10'
       
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+        run: pip install requests
         
-      - name: Run the Python sync script
+      # This step now has a unique ID so we can check its outcome
+      - name: Run Python script to generate articles.json
+        id: sync_script
         env:
           GOOGLE_SHEETS_URL: ${{ secrets.GOOGLE_SHEETS_URL }}
         run: python sync_articles.py
         
-      # This is the corrected commit step
-      - name: Commit and Push if Changes Exist
+      # This step will ONLY run if the python script above was successful
+      - name: Commit and Push if script succeeded and changes exist
+        if: steps.sync_script.outcome == 'success'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          
-          # --- THIS IS THE CRITICAL FIX ---
-          # Add the articles.json file to the staging area
           git add articles.json
-          
-          # Now, check if there are any staged changes
           if ! git diff --staged --quiet; then
-            # If there are changes, commit and push them
             git commit -m "📰 Auto-update articles from Google Sheets"
             git push
           else
-            # If there are no changes, do nothing
-            echo "No changes to commit. articles.json is already up to date."
+            echo "No changes detected in articles.json."
           fi
