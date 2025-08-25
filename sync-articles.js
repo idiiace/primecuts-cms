@@ -1,5 +1,7 @@
-const https = require('https');
+// sync-articles.js (VERSION 2 - MORE ROBUST)
+const https = require('https);
 const fs = require('fs').promises;
+const { parse } = require('csv-parse/sync'); // <-- IMPORT THE ROBUST PARSER
 
 // Get Google Sheets URL from environment
 const GOOGLE_SHEETS_URL = process.env.GOOGLE_SHEETS_URL;
@@ -11,19 +13,40 @@ async function syncArticles() {
         // Fetch CSV data from Google Sheets
         console.log('📊 Fetching from Google Sheets...');
         const csvData = await fetchFromUrl(GOOGLE_SHEETS_URL);
-        console.log(`✅ Received ${csvData.length} characters`);
+        console.log(`✅ Received ${csvData.length} characters of raw data.`);
         
-        // Parse CSV to articles
-        const articles = parseCSVToArticles(csvData);
-        console.log(`✅ Parsed ${articles.length} total articles`);
+        // Parse CSV to articles using the robust library
+        const records = parse(csvData, {
+            columns: true, // Use the first row as headers
+            skip_empty_lines: true
+        });
         
+        console.log(`✅ Parsed ${records.length} total articles successfully!`);
+
+        // Map records to our desired article format
+        const articles = records.map((record, index) => ({
+            id: String(index + 1),
+            title: record['Title'] || '',
+            status: record['Status'] || '',
+            first_paragraph: record['First Paragraph'] || '',
+            second_paragraph: record['Second Paragraph'] || '',
+            content: `${record['First Paragraph'] || ''}\n\n${record['Second Paragraph'] || ''}`.trim(),
+            keywords: record['Keywords'] || '',
+            date: record['Date'] || new Date().toLocaleDateString(),
+            notes: record['Notes'] || '',
+            url: record['URL'] || '',
+            author: 'Prime Cuts Team',
+            featured_image: '',
+            last_updated: new Date().toISOString()
+        }));
+
         // Filter to published only
         const publishedArticles = articles.filter(a => 
             a.status.toLowerCase() === 'published' && a.title.trim()
         );
-        console.log(`📋 Found ${publishedArticles.length} published articles`);
+        console.log(`📋 Found ${publishedArticles.length} published articles.`);
         
-        // Save JSON file (GitHub Actions will commit it)
+        // Save JSON file
         await fs.writeFile('articles.json', JSON.stringify(publishedArticles, null, 2));
         console.log('💾 Saved articles.json');
         
@@ -33,7 +56,6 @@ async function syncArticles() {
         console.log('📄 Generated index.html');
         
         console.log('🎉 Sync completed successfully!');
-        console.log(`📡 CDN URL: https://${process.env.GITHUB_REPOSITORY_OWNER}.github.io/${process.env.GITHUB_REPOSITORY_NAME}/articles.json`);
         
     } catch (error) {
         console.error('❌ Sync failed:', error);
@@ -52,95 +74,9 @@ function fetchFromUrl(url) {
     });
 }
 
-function parseCSVToArticles(csvText) {
-    const lines = csvText.split('\n');
-    const articles = [];
-    
-    // Skip header row
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line) {
-            const values = parseCSVLine(line);
-            if (values.length >= 2 && values[0]) { // At least title
-                articles.push({
-                    id: String(i), // Row number as ID
-                    title: values[0] || '',
-                    status: values[1] || '',
-                    first_paragraph: values[2] || '',
-                    second_paragraph: values[3] || '',
-                    content: `${values[2] || ''}\n\n${values[3] || ''}`.trim(),
-                    keywords: values[4] || '',
-                    date: values[5] || new Date().toLocaleDateString(),
-                    notes: values[6] || '',
-                    url: values[7] || '',
-                    author: 'Prime Cuts Team',
-                    featured_image: '',
-                    last_updated: new Date().toISOString()
-                });
-            }
-        }
-    }
-    
-    return articles;
-}
-
-function parseCSVLine(line) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    result.push(current.trim());
-    return result;
-}
-
 function generateIndexHtml(articles) {
-    return `<!DOCTYPE html>
-<html>
-<head>
-    <title>Prime Cuts Articles CDN</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
-        .article { border: 1px solid #ddd; padding: 15px; margin: 15px 0; border-radius: 5px; }
-        .title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 10px; }
-        .meta { color: #666; font-size: 14px; margin-bottom: 10px; }
-        .content { color: #444; line-height: 1.5; }
-        .json-link { background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0; }
-    </style>
-</head>
-<body>
-    <h1>🥩 Prime Cuts Articles CDN</h1>
-    <p><strong>Last Updated:</strong> ${new Date().toLocaleString()}</p>
-    <p><strong>Published Articles:</strong> ${articles.length}</p>
-    
-    <a href="articles.json" class="json-link">📄 Download articles.json</a>
-    
-    <h2>Available Articles:</h2>
-    
-    ${articles.map(article => `
-        <div class="article">
-            <div class="title">📰 ${article.title}</div>
-            <div class="meta">
-                👤 ${article.author} | 📅 ${article.date} | 🏷️ ${article.keywords}
-            </div>
-            <div class="content">${article.content.substring(0, 200)}${article.content.length > 200 ? '...' : ''}</div>
-        </div>
-    `).join('')}
-    
-    <hr>
-    <p><em>This CDN is updated automatically every 5 minutes from Google Sheets.</em></p>
-</body>
-</html>`;
+    // ... (This function remains exactly the same as before) ...
+    return `<!DOCTYPE html><html><head><title>Prime Cuts Articles CDN</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:20px;}.article{border:1px solid #ddd;padding:15px;margin:15px 0;border-radius:5px;}.title{font-size:18px;font-weight:bold;color:#333;margin-bottom:10px;}.meta{color:#666;font-size:14px;margin-bottom:10px;}.content{color:#444;line-height:1.5;}.json-link{background:#007bff;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;margin:20px 0;}</style></head><body><h1>🥩 Prime Cuts Articles CDN</h1><p><strong>Last Updated:</strong> ${new Date().toLocaleString()}</p><p><strong>Published Articles:</strong> ${articles.length}</p><a href="articles.json" class="json-link">📄 Download articles.json</a><h2>Available Articles:</h2>${articles.map(article=>`<div class="article"><div class="title">📰 ${article.title}</div><div class="meta">👤 ${article.author} | 📅 ${article.date} | 🏷️ ${article.keywords}</div><div class="content">${article.content.substring(0,200)}${article.content.length>200?'...':''}</div></div>`).join('')}<hr><p><em>This CDN is updated automatically every 5 minutes from Google Sheets.</em></p></body></html>`;
 }
 
 // Run the sync
