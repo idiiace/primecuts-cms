@@ -1,15 +1,14 @@
+# .github/workflows/sync-articles.yml (VERSION 2 - MORE ROBUST)
 name: Sync Articles to GitHub Pages CDN
 
 on:
   schedule:
-    # Runs every 5 minutes
     - cron: '*/5 * * * *'
-  # Allow manual trigger
   workflow_dispatch:
 
 permissions:
-  contents: write  # Needed to commit files
-  pages: write     # Needed for Pages deployment
+  contents: write
+  pages: write
 
 jobs:
   sync-and-deploy:
@@ -22,12 +21,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          
+      
+      # --- THIS IS THE NEW STEP ---
+      - name: Install dependencies
+        run: npm install csv-parse
+        
       - name: Sync articles from Google Sheets
         env:
           GOOGLE_SHEETS_URL: ${{ secrets.GOOGLE_SHEETS_URL }}
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
         run: node sync-articles.js
         
       - name: Commit updated articles
@@ -35,5 +36,6 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add articles.json index.html
-          git diff --staged --quiet || git commit -m "📰 Auto-update articles $(date)"
+          # Only commit if there are changes
+          git diff --staged --quiet || git commit -m "📰 Auto-update articles from Google Sheets"
           git push
