@@ -1,4 +1,4 @@
-# .github/workflows/sync-articles.yml (VERSION 2 - MORE ROBUST)
+# .github/workflows/sync-articles.yml (DEBUGGING VERSION)
 name: Sync Articles to GitHub Pages CDN
 
 on:
@@ -21,21 +21,36 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
       
-      # --- THIS IS THE NEW STEP ---
-      - name: Install dependencies
-        run: npm install csv-parse
+      - name: Install Dependencies
+        run: npm ci
+      
+      # --- START DEBUGGING STEPS ---
+      - name: 🕵️ Debug Step 1: Check the URL
+        run: echo "URL starts with: ${{ secrets.GOOGLE_SHEETS_URL }}" | cut -c 1-80
         
+      - name: 🕵️ Debug Step 2: Check the Response
+        run: |
+          echo "--- RESPONSE FROM GOOGLE (first 500 chars) ---"
+          curl -L "${{ secrets.GOOGLE_SHEETS_URL }}" -o response.txt
+          head -c 500 response.txt
+          echo "--- END OF RESPONSE ---"
+      # --- END DEBUGGING STEPS ---
+
       - name: Sync articles from Google Sheets
         env:
           GOOGLE_SHEETS_URL: ${{ secrets.GOOGLE_SHEETS_URL }}
         run: node sync-articles.js
         
-      - name: Commit updated articles
+      - name: Commit and Push Changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add articles.json index.html
-          # Only commit if there are changes
-          git diff --staged --quiet || git commit -m "📰 Auto-update articles from Google Sheets"
-          git push
+          if ! git diff --staged --quiet; then
+            git commit -m "📰 Auto-update articles from Google Sheets"
+            git push
+          else
+            echo "No changes to commit."
+          fi
