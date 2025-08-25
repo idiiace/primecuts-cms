@@ -1,92 +1,90 @@
-# This is YOUR proven script, with only print statements added for debugging.
-# I have checked this for syntax errors.
-
+# sync_articles.py (FINAL, DYNAMIC VERSION - NO DATA LOSS)
 import requests
 import csv
 import json
 from io import StringIO
 from datetime import datetime
-import os # <-- Added os to get the secret
+import os
 
 def fetch_articles_from_sheets(sheets_url):
-    """
-    Fetch articles from Google Sheets using public CSV export
-    """
-    try: # <--- Colon is present
-        print("🔄 Fetching data from Google Sheets...")
-        
-        response = requests.get(sheets_url, timeout=10)
+    """Fetches raw CSV data from the Google Sheets public URL."""
+    try:
+        response = requests.get(sheets_url, timeout=15)
         response.raise_for_status()
-        
-        # --- CRITICAL DEBUGGING STEP ---
-        print("\n--- RESPONSE FROM GOOGLE (first 500 chars) ---")
-        print(response.text[:500])
-        print("--- END OF RESPONSE ---\n")
-        # --- END DEBUGGING STEP ---
-        
         return response.text
-        
-    except requests.exceptions.RequestException as e: # <--- Colon is present
+    except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching from Google Sheets: {e}")
         return None
 
 def parse_csv_to_articles(csv_text):
     """
-    Parse CSV text into structured article data
+    Dynamically parses CSV text into a list of article dictionaries.
+    It captures ALL columns from the sheet, ensuring no data loss.
     """
-    try: # <--- Colon is present
-        csv_reader = csv.DictReader(StringIO(csv_text))
+    try:
+        # Use StringIO to treat the string as a file
+        csv_file = StringIO(csv_text)
+        
+        # Use DictReader to automatically use the first row as headers
+        csv_reader = csv.DictReader(csv_file)
+        
         articles = []
-        
-        for row_num, row in enumerate(csv_reader, 1):
-            cleaned_row = {k.strip(): v.strip() for k, v in row.items()}
-            if cleaned_row.get("Title"):
-                articles.append({
-                    "id": str(row_num),
-                    "title": cleaned_row.get("Title", ""),
-                    "status": cleaned_row.get("Status", ""),
-                    "content": f"{cleaned_row.get('First Paragraph', '')}\n\n{cleaned_row.get('Second Paragraph', '')}".strip(),
-                    "keywords": cleaned_row.get("Keywords", ""),
-                    "date": cleaned_row.get("Date", ""),
-                })
-        
+        for i, row in enumerate(csv_reader):
+            # Create a dictionary for the article, cleaning up keys and values
+            article_data = {key.strip(): value.strip() for key, value in row.items()}
+            
+            # Skip rows that don't have a title
+            if not article_data.get("Title"):
+                continue
+
+            # --- STANDARDIZE CORE FIELDS & ADD METADATA ---
+            # Add our own metadata while preserving all original data
+            article_data['id'] = str(i + 1)
+            article_data['last_updated'] = datetime.now().isoformat()
+            
+            # Create a combined 'content' field for convenience in Unbounce,
+            # but KEEP the original paragraph fields.
+            p1 = article_data.get('First Paragraph', '')
+            p2 = article_data.get('Second Paragraph', '')
+            article_data['content'] = f"{p1}\n\n{p2}".strip()
+
+            articles.append(article_data)
+            
         return articles
         
-    except Exception as e: # <--- Colon is present
-        print(f"❌ Error parsing CSV: {e}")
-        return []
+    except Exception as e:
+        print(f"❌ Error parsing CSV data: {e}")
+        return None
 
 def main():
-    """
-    Main function to run in GitHub Actions
-    """
-    # Get the URL from the GitHub Secret
+    """Main function to run the sync process."""
     sheets_url = os.getenv('GOOGLE_SHEETS_URL')
-
     if not sheets_url:
-        print("❌ FATAL ERROR: GOOGLE_SHEETS_URL secret is not set in the repository settings.")
+        print("❌ FATAL: GOOGLE_SHEETS_URL secret not set.")
         exit(1)
 
-    print(f"🕵️ Attempting to fetch from URL that starts with: {sheets_url[:80]}...")
-    
+    print("🔄 Starting sync process...")
     csv_data = fetch_articles_from_sheets(sheets_url)
     
     if not csv_data:
-        print("❌ Script finished: Failed to fetch data.")
-        exit(1)
+        exit(1) # Exit with an error
         
-    articles = parse_csv_to_articles(csv_data)
+    all_articles = parse_csv_to_articles(csv_data)
 
-    if articles is None:
-        print("❌ Script finished: Failed to parse data.")
-        exit(1)
+    if all_articles is None:
+        exit(1) # Exit with an error
 
-    published_articles = [a for a in articles if a.get("status", "").lower() == "published"]
+    # Filter for published articles AFTER all data has been parsed
+    published_articles = [
+        article for article in all_articles 
+        if article.get("Status", "").lower() == "published"
+    ]
     
+    # Save the complete, rich JSON file
     with open("articles.json", 'w', encoding='utf-8') as f:
         json.dump(published_articles, f, indent=2, ensure_ascii=False)
         
-    print(f"✅ Sync complete. Found {len(published_articles)} published articles. Saved to articles.json.")
+    print(f"✅ Sync complete. Found and saved {len(published_articles)} published articles to articles.json.")
 
 if __name__ == "__main__":
     main()
