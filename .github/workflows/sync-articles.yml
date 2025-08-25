@@ -1,14 +1,8 @@
-# .github/workflows/sync-articles.yml (DEBUGGING VERSION - SYNTAX FIXED)
+# .github/workflows/sync-articles.yml (PYTHON-ONLY DEBUGGING)
 name: Sync Articles to GitHub Pages CDN
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pages: write
+  workflow_dispatch: # Only run manually for this test
 
 jobs:
   sync-and-deploy:
@@ -17,43 +11,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '18'
-          cache: 'npm'
+          python-version: '3.10'
       
-      - name: Install Dependencies
-        run: npm ci
-      
-      # --- START DEBUGGING STEPS ---
-      - name: 🕵️ Debug Step 1: Check the URL
-        run: |
-          URL_PREVIEW=$(echo "${{ secrets.GOOGLE_SHEETS_URL }}" | cut -c 1-80)
-          echo "URL starts with: $URL_PREVIEW..."
+      - name: Install Python dependencies
+        run: pip install requests
         
-      - name: 🕵️ Debug Step 2: Check the Response
-        run: |
-          echo "--- RESPONSE FROM GOOGLE (first 500 chars) ---"
-          curl -L "${{ secrets.GOOGLE_SHEETS_URL }}" -o response.txt
-          head -c 500 response.txt
-          echo "" # for a clean newline
-          echo "--- END OF RESPONSE ---"
-      # --- END DEBUGGING STEPS ---
-
-      - name: Sync articles from Google Sheets
+      - name: Run the Python sync script
         env:
           GOOGLE_SHEETS_URL: ${{ secrets.GOOGLE_SHEETS_URL }}
-        run: node sync-articles.js
-        
-      - name: Commit and Push Changes
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add articles.json index.html
-          if ! git diff --staged --quiet; then
-            git commit -m "📰 Auto-update articles from Google Sheets"
-            git push
-          else
-            echo "No changes to commit."
-          fi
+        run: python sync_articles.py
