@@ -1,4 +1,4 @@
-# .github/workflows/sync-articles.yml (DEBUGGING VERSION)
+# .github/workflows/sync-articles.yml (DEBUGGING VERSION - SYNTAX FIXED)
 name: Sync Articles to GitHub Pages CDN
 
 on:
@@ -28,13 +28,16 @@ jobs:
       
       # --- START DEBUGGING STEPS ---
       - name: 🕵️ Debug Step 1: Check the URL
-        run: echo "URL starts with: ${{ secrets.GOOGLE_SHEETS_URL }}" | cut -c 1-80
+        run: |
+          URL_PREVIEW=$(echo "${{ secrets.GOOGLE_SHEETS_URL }}" | cut -c 1-80)
+          echo "URL starts with: $URL_PREVIEW..."
         
       - name: 🕵️ Debug Step 2: Check the Response
         run: |
           echo "--- RESPONSE FROM GOOGLE (first 500 chars) ---"
           curl -L "${{ secrets.GOOGLE_SHEETS_URL }}" -o response.txt
           head -c 500 response.txt
+          echo "" # for a clean newline
           echo "--- END OF RESPONSE ---"
       # --- END DEBUGGING STEPS ---
 
