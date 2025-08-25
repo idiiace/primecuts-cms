@@ -1,5 +1,5 @@
 // sync-articles.js (VERSION 2 - MORE ROBUST)
-const https = require('https);
+const https = require('https');
 const fs = require('fs').promises;
 const { parse } = require('csv-parse/sync'); // <-- IMPORT THE ROBUST PARSER
 
