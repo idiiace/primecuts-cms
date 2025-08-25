@@ -7,7 +7,7 @@ from datetime import datetime
 
 # This is the only function we need for this test
 def fetch_articles_from_sheets(sheets_url):
-    try       
+    try:       
         response = requests.get(sheets_url, timeout=10)
         response.raise_for_status()
         
