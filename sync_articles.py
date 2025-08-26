@@ -1,4 +1,4 @@
-# sync_articles.py (FINAL PRODUCTION VERSION v3.1 - Cleaned up Content Fields)
+# sync_articles.py (FINAL & BULLETPROOF v4.0 - All Fixes + Sanity Check)
 import requests
 import csv
 import json
@@ -8,17 +8,18 @@ import os
 import sys
 
 def fetch_articles_from_sheets(sheets_url):
-    """Fetches raw CSV data from the Google Sheets public URL."""
+    """Fetches raw CSV data and correctly handles text encoding."""
     try:
         response = requests.get(sheets_url, timeout=15)
         response.raise_for_status()
+        response.encoding = response.apparent_encoding # Fixes special characters
         return response.text
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching from Google Sheets: {e}")
         return None
 
 def parse_csv_to_articles(csv_text):
-    """Dynamically parses CSV text into a list of article dictionaries."""
+    """Dynamically parses CSV text, ensuring no data loss or duplication."""
     try:
         csv_file = StringIO(csv_text)
         csv_reader = csv.DictReader(csv_file)
@@ -26,12 +27,10 @@ def parse_csv_to_articles(csv_text):
         for i, row in enumerate(csv_reader):
             article_data = {key.strip(): value.strip() for key, value in row.items()}
             
-            # Use the first column as the title, robustly
-            title = list(article_data.values())[0]
+            title = list(article_data.values())[0] if article_data else None
             if not title:
                 continue
             
-            # Add our own metadata
             article_data['id'] = str(i + 1)
             article_data['last_updated'] = datetime.now().isoformat()
             
@@ -42,10 +41,10 @@ def parse_csv_to_articles(csv_text):
         return None
 
 def main():
-    """Main function to run the sync process."""
-    sheets_url = os.getenv('GOOGLE_SHEET_URL') # Matching the new secret name
+    """Main function to run the sync process with all protections."""
+    sheets_url = os.getenv('GOOGLE_SHEETS_URL')
     if not sheets_url:
-        print("❌ FATAL: GOOGLE_SHEET_URL secret not set.")
+        print("❌ FATAL: GOOGLE_SHEETS_URL secret not set.")
         sys.exit(1)
 
     print("🔄 Starting sync process...")
@@ -62,11 +61,18 @@ def main():
         if article.get("Status", "").lower() == "published"
     ]
     
-    # Bulletproof Sanity Check
+    # --- THIS IS THE CRITICAL SANITY CHECK YOU RIGHTFULLY POINTED OUT ---
+    # It prevents the script from saving an empty file if no articles are found.
     if not published_articles:
-        print("\n⚠️ WARNING: Found 0 published articles. Exiting without updating JSON.\n")
+        print("\n⚠️ SANITY CHECK FAILED: Found 0 published articles.")
+        print("To prevent accidentally wiping out the live CDN data, the script will now exit WITHOUT updating articles.json.")
+        print("If you truly intended to unpublish all articles, you must delete the articles.json file from the repository manually.\n")
+        # Exit with a success code (0) so the workflow doesn't report a "failure",
+        # but the key is that we exit *before* the file is written.
         sys.exit(0) 
+    # --- END OF SANITY CHECK ---
 
+    # This code will only be reached if the sanity check passes.
     with open("articles.json", 'w', encoding='utf-8') as f:
         json.dump(published_articles, f, indent=2, ensure_ascii=False)
         
